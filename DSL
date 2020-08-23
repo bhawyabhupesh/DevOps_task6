@@ -1,0 +1,116 @@
+job('task6_job1'){
+description("to pull the data from github when developer push their code to")
+scm{
+github("bhawyabhupesh/DevOps_task6.git")
+}
+triggers {
+scm("* * * * *")
+upstream("seed_job","SUCCESS")
+}
+}
+
+
+job("task6_job2"){
+description("Run the environment to deploy code.")
+triggers {
+upstream("task6_job1","SUCCESS")
+}
+steps{
+shell('''if ls |grep .php 
+then
+if kubectl get deployment |grep webphp-deploy 
+then
+kubectl delete all --all
+kubectl apply -k /root/yaml_codes/task3
+status=$(sudo kubectl get pods -o 'jsonpath={.items[0].metadata.name}')
+kubectl cp /var/lib/jenkins/workspace/task6_job $status:/var/www/html/
+else
+sudo kubectl apply -k /root/yaml_codes/task3
+status=$(sudo kubectl get pods -o 'jsonpath={.items[0].metadata.name}')
+kubectl cp /var/lib/jenkins/workspace/task6_job $status:/var/www/html/
+fi
+fi
+
+
+if ls |grep .html
+then
+if kubectl get deployment |grep webhtml-deploy
+then
+kubectl delete all --all
+kubectl apply -k /root/yaml_codes/task3/html
+status=$(sudo kubectl get pods -o 'jsonpath={.items[0].metadata.name}')
+kubectl cp /var/lib/jenkins/workspace/task6_job $status:/var/www/html/
+else
+kubectl apply -k /root/yaml_codes/task3/html
+status=$(kubectl get pods -o 'jsonpath={.items[0].metadata.name}')
+kubectl cp /var/lib/jenkins/workspace/task6_job1 $status:/var/www/html/
+fi
+fi
+''')
+}
+}
+
+
+job("task6_job3"){
+description("App working status")
+triggers {
+upstream("task6_job2","SUCCESS")
+}
+steps{
+shell(''' if sudo kubectl get deploy | grep web-deploy
+then
+echo “Web Server running”
+else
+echo “Server not running”
+fi
+''')
+}
+}
+job("task6_job4"){
+description("OS working status & mail devilery")
+triggers {
+upstream("task6_job2","SUCCESS")
+}
+publishers {
+extendedEmail {
+recipientList("rahulsingh261201@gmail.com")
+defaultSubject("Webserver Issue")
+defaultContent('''Hey Developer
+Your deployment is facing some issue so kindly troubleshoot it as quick as you can''')
+contentType("text/plain")
+triggers {
+beforeBuild()
+stillUnstable {
+subject("Subject")
+content("Body")
+sendTo {
+developers()
+requester()
+culprits()
+}
+}
+}
+}
+}
+steps{
+shell(''' if sudo kubectl get deploy | grep web-deploy
+then
+echo “Web Server running”
+exit 0
+else
+exit 1
+fi
+''')
+}
+}
+buildPipelineView("DevOps Assembly Lines Task6") {
+filterBuildQueue()
+filterExecutors()
+title("Task6")
+displayedBuilds(1)
+selectedJob("seed_job")
+alwaysAllowManualTrigger()
+showPipelineParameters()
+refreshFrequency(60)
+
+}
